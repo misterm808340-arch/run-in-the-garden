@@ -110,6 +110,7 @@
 
     render: function (ctx, view) {
       this._view = view;
+      var SC = (RG.Config.view3d.playerScale || 1);
       var x = this._px(view);
       var groundY = view.baseY;
       var y = groundY - this.jumpH;
@@ -121,11 +122,12 @@
       var airK = U.clamp(1 - this.jumpH / 260, 0.35, 1);
       ctx.fillStyle = 'rgba(30,70,30,0.28)';
       ctx.beginPath();
-      ctx.ellipse(x, groundY + 3, 22 * airK, 6.5 * airK, 0, 0, 6.283);
+      ctx.ellipse(x, groundY + 3, 22 * airK * SC, 6.5 * airK * SC, 0, 0, 6.283);
       ctx.fill();
 
       ctx.save();
       ctx.translate(x, y);
+      ctx.scale(SC, SC);
 
       // jump stretch / landing squash
       if (!this.grounded) {
@@ -208,18 +210,18 @@
         ctx.lineWidth = 3;
         ctx.fillStyle = 'rgba(90,200,250,0.16)';
         ctx.beginPath();
-        ctx.arc(x, y - 34, 42 * pulse, 0, 6.283);
+        ctx.arc(x, y - 34 * SC, 42 * SC * pulse, 0, 6.283);
         ctx.fill(); ctx.stroke();
         ctx.fillStyle = 'rgba(255,255,255,0.5)';
         ctx.beginPath();
-        ctx.ellipse(x - 14, y - 52, 7, 4.5, -0.6, 0, 6.283);
+        ctx.ellipse(x - 14 * SC, y - 52 * SC, 7 * SC, 4.5 * SC, -0.6, 0, 6.283);
         ctx.fill();
       }
       if (this.invincible > 0 && !this.shield) {
         ctx.strokeStyle = 'rgba(255,255,255,' + (0.35 + Math.sin(RG.Utils.now() / 60) * 0.25) + ')';
         ctx.lineWidth = 2.5;
         ctx.beginPath();
-        ctx.arc(x, y - 34, 40, 0, 6.283);
+        ctx.arc(x, y - 34 * SC, 40 * SC, 0, 6.283);
         ctx.stroke();
       }
       if (this.magnet > 0) {
@@ -228,12 +230,12 @@
         ctx.setLineDash([6, 8]);
         ctx.lineDashOffset = -RG.Utils.now() / 30;
         ctx.beginPath();
-        ctx.arc(x, y - 30, RG.Config.view3d.magnetZ * 0.9, 0, 6.283);
+        ctx.arc(x, y - 30 * SC, RG.Config.view3d.magnetZ * 0.9, 0, 6.283);
         ctx.stroke();
         ctx.setLineDash([]);
       }
       if (this.boost > 0) {
-        RG.Particles.speedLines(x, y - 26);
+        RG.Particles.speedLines(x, y - 26 * SC);
       }
     },
 

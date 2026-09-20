@@ -120,9 +120,10 @@
     /* player position on screen (logical units) - used by fx */
     playerScreen: function () {
       var p = RG.Player;
+      var SC = (C.view3d.playerScale || 1);
       return {
         x: this.view.cx + p.lat * this.view.laneSpan,
-        y: this.view.baseY - p.jumpH - 30
+        y: this.view.baseY - p.jumpH - 30 * SC
       };
     },
 

@@ -13,7 +13,7 @@
   };
 
   var Config = {
-    VERSION: '1.1.0',
+    VERSION: '1.2.0',
 
     /* ---------------- AdMob (TEST MODE) ---------------- */
     ads: {
@@ -36,6 +36,7 @@
       trackHalfW: 150,           // track half width at player plane
       camD: 5.8,                 // perspective: scale(z) = camD / (camD + z)
       zFar: 100,                 // spawn distance (normalized track units)
+      playerScale: 1.42,         // bunny size boost (was too small on phones)
       zSpeedK: 0.14,             // world speed (u/s) -> z approach speed
       hitZ: 6,                   // collision window around the player plane
       laneHitTol: 0.58,          // lateral tolerance to hit an obstacle
@@ -44,10 +45,11 @@
       magnetZ: 62                // magnet attraction range (z units)
     },
 
-    /* ---------------- Speed & difficulty ---------------- */
-    speedStart: 330,             // world units / second
-    speedGainPerSec: 2.4,        // linear ramp while alive
-    speedMax: 760,
+    /* ---------------- Speed & difficulty ----------------
+       Gentle start, then builds up to a fast pace over time. */
+    speedStart: 265,             // world units / second (easy warm-up)
+    speedGainPerSec: 3.6,        // linear ramp while alive (gets fast)
+    speedMax: 820,
     boostMul: 1.55,
     slowMul: 0.55,               // puddle slow factor
     slowDur: 1.2,
