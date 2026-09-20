@@ -24,6 +24,7 @@
       var V3 = C.view3d;
       var s = RG.World.scaleAt(Math.max(e.z, 0), V3.camD);
       e.s = s;
+      e.vs = s * (V3.entityScale || 1);   // sprite size scale (projection stays lane-true)
       e.sx = view.cx + e.lat * V3.laneSpan * s;
       e.sy = view.horizonY + (view.baseY - view.horizonY) * s;
     },
@@ -246,7 +247,8 @@
         var o = this.obstacles[i];
         if (o.z > V3.hitZ || o.z < -V3.hitZ) continue;
         if (Math.abs(p.lat - o.lat) >= V3.laneHitTol) continue;
-        if (o.jumpable && p.jumpH > o.h * 0.62) continue;  // sailed over it
+        // scaled threshold: matches the taller on-screen sprite so jump-overs look fair
+        if (o.jumpable && p.jumpH > o.h * 0.62 * (V3.entityScale || 1)) continue;
         return o;
       }
       return null;
@@ -263,7 +265,7 @@
       for (i = this.obstacles.length - 1; i >= 0; i--) {
         var o = this.obstacles[i];
         if (o.z < 34) {
-          RG.Particles.poof(o.sx, o.sy - o.h * o.s * 0.5);
+          RG.Particles.poof(o.sx, o.sy - o.h * (o.vs || o.s) * 0.5);
           this.obstacles.splice(i, 1);
         }
       }
@@ -308,9 +310,9 @@
     },
 
     _coin: function (ctx, e) {
-      var s = e.s;
-      var r = Math.max(e.r * s * 1.25, 1.6);
-      var bob = Math.sin(this._t * 4 + e.seed) * 3 * s;
+      var s = e.s, k = e.vs;                 // s = projection, k = sprite size
+      var r = Math.max(e.r * k * 1.25, 1.6);
+      var bob = Math.sin(this._t * 4 + e.seed) * 3 * k;
       var x = e.sx, y = e.sy - e.y * s * 0.55 + bob;
       // ground shadow
       ctx.fillStyle = 'rgba(60,90,50,0.18)';
@@ -322,7 +324,7 @@
       ctx.fillStyle = g;
       ctx.beginPath(); ctx.ellipse(x, y, Math.max(rx, 1), r, 0, 0, 6.283); ctx.fill();
       if (r > 4) {
-        ctx.strokeStyle = '#C77800'; ctx.lineWidth = Math.max(1, 2 * s * 1.3);
+        ctx.strokeStyle = '#C77800'; ctx.lineWidth = Math.max(1, 2 * k * 1.3);
         ctx.beginPath(); ctx.ellipse(x, y, Math.max(rx, 1), r, 0, 0, 6.283); ctx.stroke();
         if (spin > 0.45) {
           ctx.strokeStyle = 'rgba(199,120,0,0.8)'; ctx.lineWidth = 1.2;
@@ -332,9 +334,9 @@
     },
 
     _star: function (ctx, e) {
-      var s = e.s;
-      var r = Math.max(e.r * s * 1.25, 1.8);
-      var x = e.sx, y = e.sy - e.y * s * 0.55 + Math.sin(this._t * 3 + e.seed) * 3 * s;
+      var s = e.s, k = e.vs;
+      var r = Math.max(e.r * k * 1.25, 1.8);
+      var x = e.sx, y = e.sy - e.y * s * 0.55 + Math.sin(this._t * 3 + e.seed) * 3 * k;
       ctx.fillStyle = 'rgba(60,90,50,0.16)';
       ctx.beginPath(); ctx.ellipse(e.sx, e.sy, r * 0.8, r * 0.25, 0, 0, 6.283); ctx.fill();
       ctx.save();
@@ -342,7 +344,7 @@
       ctx.rotate(this._t * 1.4 + e.seed);
       ctx.fillStyle = '#FFD84D';
       ctx.strokeStyle = '#C77800';
-      ctx.lineWidth = Math.max(1, 2 * s * 1.3);
+      ctx.lineWidth = Math.max(1, 2 * k * 1.3);
       ctx.beginPath();
       for (var i = 0; i < 5; i++) {
         var a = i * 1.2566 - 1.5708;
@@ -357,15 +359,15 @@
         var tw = 0.5 + Math.sin(this._t * 6 + e.seed) * 0.5;
         ctx.fillStyle = 'rgba(255,255,255,' + (0.5 + tw * 0.5) + ')';
         ctx.beginPath();
-        ctx.arc(x + r * 0.4, y - r * 0.5, 1.8 + tw * s * 2, 0, 6.283);
+        ctx.arc(x + r * 0.4, y - r * 0.5, 1.8 + tw * k * 2, 0, 6.283);
         ctx.fill();
       }
     },
 
     _powerup: function (ctx, e) {
-      var s = e.s;
-      var size = 20 * s * 1.3;
-      var bob = Math.sin(this._t * 3 + e.seed) * 4 * s;
+      var s = e.s, k = e.vs;
+      var size = 20 * k * 1.3;
+      var bob = Math.sin(this._t * 3 + e.seed) * 4 * k;
       var x = e.sx, y = e.sy - (e.y * s * 0.55) + bob;
       var col = { shield: '#5AC8FA', magnet: '#F25555', boost: '#FF9F1C', x2: '#FFC93C' }[e.pu];
       var dark = { shield: '#2E86C1', magnet: '#C93A3A', boost: '#D97E0E', x2: '#E8A400' }[e.pu];
@@ -381,7 +383,7 @@
       ctx.fillStyle = col;
       this._rrect(ctx, x - size, y - size, size * 2, size * 2, size * 0.45);
       ctx.fill();
-      ctx.strokeStyle = dark; ctx.lineWidth = Math.max(1.2, 2.6 * s * 1.3);
+      ctx.strokeStyle = dark; ctx.lineWidth = Math.max(1.2, 2.6 * k * 1.3);
       this._rrect(ctx, x - size, y - size, size * 2, size * 2, size * 0.45);
       ctx.stroke();
       if (size > 6) {
@@ -391,27 +393,27 @@
 
         ctx.fillStyle = '#FFFFFF';
         ctx.strokeStyle = '#FFFFFF';
-        var k = e.pu;
+        var pk = e.pu;
         ctx.save();
         ctx.translate(x, y);
-        ctx.scale(s * 1.3, s * 1.3);
-        if (k === 'shield') {
+        ctx.scale(k * 1.3, k * 1.3);
+        if (pk === 'shield') {
           ctx.beginPath();
           ctx.moveTo(0, -11); ctx.lineTo(9, -7); ctx.lineTo(9, 2);
           ctx.quadraticCurveTo(9, 9, 0, 12);
           ctx.quadraticCurveTo(-9, 9, -9, 2); ctx.lineTo(-9, -7);
           ctx.closePath(); ctx.fill();
-        } else if (k === 'magnet') {
+        } else if (pk === 'magnet') {
           ctx.strokeStyle = '#fff'; ctx.lineWidth = 5; ctx.lineCap = 'butt';
           ctx.beginPath(); ctx.arc(0, 2, 8, Math.PI, 0); ctx.stroke();
           ctx.fillRect(-10.5, 2, 5, 8);
           ctx.fillRect(5.5, 2, 5, 8);
-        } else if (k === 'boost') {
+        } else if (pk === 'boost') {
           ctx.beginPath();
           ctx.moveTo(2, -12); ctx.lineTo(-7, 2); ctx.lineTo(-1, 2);
           ctx.lineTo(-3, 12); ctx.lineTo(7, -2); ctx.lineTo(1, -2);
           ctx.closePath(); ctx.fill();
-        } else if (k === 'x2') {
+        } else if (pk === 'x2') {
           ctx.font = '900 17px system-ui, sans-serif';
           ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
           ctx.fillText('2X', 0, 1);
@@ -421,13 +423,13 @@
     },
 
     _obstacle: function (ctx, o) {
-      var s = o.s;
+      var k = o.vs || o.s;                   // sprite size (entityScale applied)
       // ground shadow
       ctx.fillStyle = 'rgba(50,80,40,0.20)';
       ctx.beginPath();
-      ctx.ellipse(o.sx, o.sy, o.w * s * 0.55, o.h * s * 0.16 + 1, 0, 0, 6.283);
+      ctx.ellipse(o.sx, o.sy, o.w * k * 0.55, o.h * k * 0.16 + 1, 0, 0, 6.283);
       ctx.fill();
-      var w = o.w * s * 1.25, h = o.h * s * 1.25, x = o.sx, bottom = o.sy;
+      var w = o.w * k * 1.25, h = o.h * k * 1.25, x = o.sx, bottom = o.sy;
       switch (o.kind) {
         case 'rock': this._rock(ctx, x, bottom, w, h, o); break;
         case 'pot': this._pot(ctx, x, bottom, w, h, o); break;

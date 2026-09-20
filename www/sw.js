@@ -3,7 +3,7 @@
    stale-while-revalidate so updates arrive on the second launch. */
 'use strict';
 
-var CACHE = 'ritg-v1.2.0';
+var CACHE = 'ritg-v1.3.0';
 
 var PRECACHE = [
   './',

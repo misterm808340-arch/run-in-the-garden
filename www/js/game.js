@@ -274,7 +274,7 @@
       /* obstacles */
       var o = RG.Entities.hitObstacle(p);
       if (!o) return;
-      var ox = o.sx, oy = o.sy - o.h * o.s * 0.5;
+      var ox = o.sx, oy = o.sy - o.h * (o.vs || o.s) * 0.5;
 
       if (o.kind === 'puddle') {
         // run through it (grounded) = splash + brief slow-down; jumping over = clean

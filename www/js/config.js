@@ -13,7 +13,7 @@
   };
 
   var Config = {
-    VERSION: '1.2.0',
+    VERSION: '1.3.0',
 
     /* ---------------- AdMob (TEST MODE) ---------------- */
     ads: {
@@ -36,7 +36,8 @@
       trackHalfW: 150,           // track half width at player plane
       camD: 5.8,                 // perspective: scale(z) = camD / (camD + z)
       zFar: 100,                 // spawn distance (normalized track units)
-      playerScale: 1.42,         // bunny size boost (was too small on phones)
+      playerScale: 1.0,          // bunny at natural size (world objects scale instead)
+      entityScale: 1.4,          // coins/stars/power-ups/obstacles drawn ~40% bigger
       zSpeedK: 0.14,             // world speed (u/s) -> z approach speed
       hitZ: 6,                   // collision window around the player plane
       laneHitTol: 0.58,          // lateral tolerance to hit an obstacle
