@@ -1,7 +1,7 @@
-/* Run in the Garden - layered parallax garden world.
-   Everything is procedurally drawn (no image assets): sky, sun, clouds,
-   birds, hills, hedges, track-side props (trees, benches, fountain, lamps),
-   flowers, butterflies and petals. */
+/* Run in the Garden - FORWARD 3D garden world (Subway-Surfers style).
+   The camera sits behind the bunny looking down a garden path that
+   recedes to the horizon. Everything is procedural (no image assets).
+   Projection: scale(z) = camD / (camD + z)  - z in [0 .. zFar]. */
 (function () {
   'use strict';
   window.RG = window.RG || {};
@@ -13,22 +13,22 @@
   }
 
   var World = {
-    w: 400, h: 700, groundY: 560,
+    w: 400, h: 700, horizonY: 252, baseY: 560,
     clouds: [], birds: [], butterflies: [], petals: [],
-    _birdTimer: 5, _t: 0,
+    _birdTimer: 5, _t: 0, camDist: 0,
 
     init: function () {
       U = RG.Utils;
       var i;
       for (i = 0; i < 5; i++) {
-        this.clouds.push({ x: U.rand(0, 500), y: U.rand(30, 170), s: U.rand(0.7, 1.5), spd: U.rand(4, 10) });
+        this.clouds.push({ x: U.rand(0, 500), y: U.rand(24, 120), s: U.rand(0.7, 1.4), spd: U.rand(4, 9) });
       }
       for (i = 0; i < 4; i++) {
         this.butterflies.push(this._newButterfly(true));
       }
       for (i = 0; i < 9; i++) {
         this.petals.push({
-          x: U.rand(0, 440), y: U.rand(-400, 650),
+          x: U.rand(0, 440), y: U.rand(-400, 700),
           vy: U.rand(26, 52), sway: U.rand(0, 6.28),
           rot: U.rand(0, 6.28), vr: U.rand(-2, 2),
           c: U.pick(['#FFB7C5', '#FFD1DC', '#FFE3EA', '#F9C0D0'])
@@ -39,7 +39,7 @@
     _newButterfly: function (anywhere) {
       return {
         x: anywhere ? U.rand(0, 400) : 420,
-        y: U.rand(this.groundY - 240, this.groundY - 40),
+        y: U.rand(this.horizonY + 30, this.baseY - 90),
         vx: U.rand(-46, -24),
         ph: U.rand(0, 6.28),
         c1: U.pick(['#FF8AC2', '#FFC93C', '#8FD9FF', '#C79BFF']),
@@ -47,21 +47,23 @@
       };
     },
 
-    resize: function (w, h, groundY) {
-      this.w = w; this.h = h; this.groundY = groundY;
+    resize: function (w, h, horizonY, baseY) {
+      this.w = w; this.h = h;
+      this.horizonY = horizonY; this.baseY = baseY;
       this._sky = null;
     },
 
-    /* ------------------------------- update ------------------------------- */
-    update: function (dt, speed, active) {
+    /* ------------------------------ update ------------------------------ */
+    update: function (dt, speed, active, trackPos) {
       this._t += dt;
+      this.camDist = trackPos || 0;
       var i, p;
       var drift = (active ? speed : 40);
 
       for (i = 0; i < this.clouds.length; i++) {
         p = this.clouds[i];
-        p.x -= (p.spd + drift * 0.045) * dt;
-        if (p.x < -110) { p.x = this.w + U.rand(30, 140); p.y = U.rand(30, 170); }
+        p.x -= (p.spd + drift * 0.02) * dt;
+        if (p.x < -110) { p.x = this.w + U.rand(30, 140); p.y = U.rand(24, 120); }
       }
 
       // birds occasionally crossing the sky
@@ -70,7 +72,7 @@
         this._birdTimer = U.rand(7, 15);
         var n = U.randi(1, 3);
         for (i = 0; i < n; i++) {
-          this.birds.push({ x: this.w + 30 + i * 26, y: U.rand(40, this.groundY * 0.32), vx: U.rand(-72, -46), ph: U.rand(0, 6.28) });
+          this.birds.push({ x: this.w + 30 + i * 26, y: U.rand(24, this.horizonY * 0.55), vx: U.rand(-72, -46), ph: U.rand(0, 6.28) });
         }
       }
       for (i = this.birds.length - 1; i >= 0; i--) {
@@ -80,61 +82,67 @@
         if (p.x < -60) this.birds.splice(i, 1);
       }
 
-      // butterflies flutter around the track
+      // butterflies flutter around the path
       for (i = 0; i < this.butterflies.length; i++) {
         p = this.butterflies[i];
         p.ph += dt * 6;
         p.x += p.vx * dt;
-        p.y += Math.sin(p.ph) * 34 * dt;
+        p.y += Math.sin(p.ph) * 30 * dt;
         if (p.x < -30) this.butterflies[i] = this._newButterfly(false);
+        if (p.y < this.horizonY + 16) p.y = this.horizonY + 16;
       }
 
-      // falling petals
+      // falling petals drift toward the camera
       for (i = 0; i < this.petals.length; i++) {
         p = this.petals[i];
         p.sway += dt * 2.2;
         p.rot += p.vr * dt;
-        p.x += Math.sin(p.sway) * 18 * dt - drift * 0.18 * dt;
-        p.y += p.vy * dt;
+        p.x += Math.sin(p.sway) * 18 * dt;
+        p.y += (p.vy + drift * 0.10) * dt;
         if (p.y > this.h + 20 || p.x < -30) {
           p.x = U.rand(0, this.w + 60); p.y = U.rand(-80, -10);
         }
       }
     },
 
-    /* ------------------------------- render ------------------------------- */
+    /* --------------------------- projection ----------------------------- */
+    scaleAt: function (z, camD) { return camD / (camD + Math.max(z, 0)); },
+
+    /* ------------------------------- render ----------------------------- */
     render: function (ctx, cam) {
-      this._skyFill(ctx, cam);
+      var V = cam; // {w,h,horizonY,baseY,laneSpan,trackHalfW,dist,cx,camD}
+      this._skyFill(ctx, V);
       this._sun(ctx);
       this._clouds(ctx);
       this._birds(ctx);
-      this._hills(ctx, cam);
-      this._hedge(ctx, cam);
-      this._ground(ctx, cam);
-      this._trackProps(ctx, cam);
-      this._trackFlowers(ctx, cam);
+      this._hills(ctx, V);
+      this._ground(ctx, V);
+      this._track(ctx, V);
+      this._trackProps(ctx, V);
+      this._trackFlowers(ctx, V);
       this._petals(ctx);
     },
 
     renderFront: function (ctx, cam) {
       this._butterflies(ctx, cam);
-      this._foreground(ctx, cam);
+      this._cornerTufts(ctx);
     },
 
-    _skyFill: function (ctx, cam) {
+    _skyFill: function (ctx, V) {
+      var hy = V.horizonY;
       if (!this._sky) {
-        var g = ctx.createLinearGradient(0, 0, 0, this.groundY);
+        var g = ctx.createLinearGradient(0, 0, 0, hy);
         g.addColorStop(0, '#6FC3F7');
-        g.addColorStop(0.55, '#A5E3FF');
+        g.addColorStop(0.6, '#A5E3FF');
         g.addColorStop(1, '#D8F9E0');
         this._sky = g;
       }
       ctx.fillStyle = this._sky;
-      ctx.fillRect(0, 0, this.w, this.groundY + 2);
+      ctx.fillRect(0, 0, this.w, hy + 2);
     },
 
     _sun: function (ctx) {
-      var x = 66, y = 72, r = 30;
+      var x = 60, y = 64, r = 28;
       var g = ctx.createRadialGradient(x, y, r * 0.4, x, y, r * 2.6);
       g.addColorStop(0, 'rgba(255,236,140,0.9)');
       g.addColorStop(1, 'rgba(255,236,140,0)');
@@ -160,7 +168,9 @@
     _clouds: function (ctx) {
       ctx.fillStyle = 'rgba(255,255,255,0.92)';
       for (var i = 0; i < this.clouds.length; i++) {
-        this._cloud(ctx, this.clouds[i].x, this.clouds[i].y, this.clouds[i].s);
+        var c = this.clouds[i];
+        if (c.y > this.horizonY - 20) continue;
+        this._cloud(ctx, c.x, c.y, c.s);
       }
     },
 
@@ -179,6 +189,7 @@
       ctx.lineCap = 'round';
       for (var i = 0; i < this.birds.length; i++) {
         var b = this.birds[i];
+        if (b.y > this.horizonY - 10) continue;
         var f = Math.sin(this._t * 9 + b.ph) * 4;
         ctx.beginPath();
         ctx.moveTo(b.x - 7, b.y - f * 0.4);
@@ -188,150 +199,236 @@
       }
     },
 
-    _hills: function (ctx, cam) {
-      var off = cam.dist * 0.18;
-      // far hills
+    /* distant hills + far trees sitting ON the horizon */
+    _hills: function (ctx, V) {
+      var off = V.dist * 0.02;
+      var hy = V.horizonY;
+      // far hill range
       ctx.fillStyle = '#BCE8A8';
-      this._hillRange(ctx, off * 0.55, this.groundY - 96, 240, 46);
-      // near hills with far trees
-      ctx.fillStyle = '#9FDd8F'.toLowerCase();
-      this._hillRange(ctx, off, this.groundY - 58, 200, 40);
-      this._farTrees(ctx, cam, off);
+      this._hillRange(ctx, off * 0.5, hy, 300, 30);
+      // near hill range
+      ctx.fillStyle = '#9FDD8F';
+      this._hillRange(ctx, off, hy, 210, 20);
+      // far tree line
+      ctx.fillStyle = '#6FBF62';
+      var spacing = 30;
+      var start = Math.floor((off - 40) / spacing);
+      var end = Math.ceil((off + this.w + 40) / spacing);
+      for (var n = start; n <= end; n++) {
+        var r = hash01(n * 3.3);
+        if (r < 0.2) continue;
+        var x = n * spacing - off;
+        var s = 0.4 + hash01(n * 9.1) * 0.5;
+        this._farTree(ctx, x, hy + 2, s);
+      }
+      // hedge bumps along the horizon
+      ctx.fillStyle = '#4E9E52';
+      var hsp = 17;
+      var hs = Math.floor((off - 30) / hsp);
+      var he = Math.ceil((off + this.w + 30) / hsp);
+      for (var m = hs; m <= he; m++) {
+        var hb = 3 + hash01(m * 5.7) * 4;
+        ctx.beginPath();
+        ctx.arc(m * hsp - off, hy + 1, hb, Math.PI, 0);
+        ctx.fill();
+      }
+    },
+
+    _farTree: function (ctx, x, baseY, s) {
+      ctx.fillRect(x - 1.6 * s, baseY - 14 * s, 3.2 * s, 14 * s);
+      ctx.beginPath();
+      ctx.arc(x, baseY - 18 * s, 7 * s, 0, 6.283);
+      ctx.fill();
     },
 
     _hillRange: function (ctx, off, baseY, wl, amp) {
       ctx.beginPath();
-      ctx.moveTo(0, baseY + amp + 60);
+      ctx.moveTo(-20, baseY + 2);
       var x, y;
-      for (x = -40; x <= this.w + 40; x += 10) {
+      for (x = -20; x <= this.w + 20; x += 14) {
         var wx = x + off;
-        y = baseY + Math.sin(wx / wl * 6.283) * amp * 0.5 + Math.sin(wx / (wl * 0.37) + 2) * amp * 0.22;
+        y = baseY - amp * (0.5 + 0.5 * Math.sin(wx / wl * 6.283)) - Math.sin(wx / (wl * 0.37) + 2) * amp * 0.2;
         ctx.lineTo(x, y);
       }
-      ctx.lineTo(this.w + 40, baseY + amp + 60);
+      ctx.lineTo(this.w + 20, baseY + 2);
       ctx.closePath();
       ctx.fill();
     },
 
-    _farTrees: function (ctx, cam, off) {
-      var spacing = 64, baseY = this.groundY - 52;
-      var start = Math.floor((off - 60) / spacing);
-      var end = Math.ceil((off + this.w + 60) / spacing);
-      for (var n = start; n <= end; n++) {
-        var r = hash01(n);
-        if (r < 0.18) continue;
-        var x = n * spacing - off + (hash01(n * 3) * 30 - 15);
-        var s = 0.55 + hash01(n * 7) * 0.5;
-        ctx.fillStyle = r > 0.5 ? '#6FBF62' : '#5FAF57';
-        this._treeShape(ctx, x, baseY + 6, s * 0.8, true);
-      }
-    },
-
-    /* continuous garden hedge with picket accents (mid layer) */
-    _hedge: function (ctx, cam) {
-      var off = cam.dist * 0.42;
-      var baseY = this.groundY - 6;
-      ctx.fillStyle = '#4E9E52';
-      var spacing = 34;
-      var start = Math.floor((off - 40) / spacing);
-      var end = Math.ceil((off + this.w + 40) / spacing);
-      for (var n = start; n <= end; n++) {
-        var x = n * spacing - off;
-        var s = 0.9 + hash01(n * 13) * 0.35;
-        ctx.beginPath();
-        ctx.arc(x, baseY - 10 * s, 15 * s, Math.PI, 0);
-        ctx.arc(x + 15 * s, baseY - 14 * s, 13 * s, Math.PI, 0);
-        ctx.arc(x - 15 * s, baseY - 12 * s, 12 * s, Math.PI, 0);
-        ctx.fill();
-        ctx.fillRect(x - 20 * s, baseY - 11 * s, 40 * s, 12 * s);
-      }
-      // fence pickets peeking above hedge occasionally
-      ctx.fillStyle = '#E8D9B8';
-      var psp = 150;
-      var pstart = Math.floor((off - 40) / psp);
-      var pend = Math.ceil((off + this.w + 40) / psp);
-      for (var m = pstart; m <= pend; m++) {
-        if (hash01(m * 29) < 0.35) continue;
-        var px = m * psp - off;
-        ctx.fillRect(px - 2, baseY - 40, 4, 26);
-        ctx.fillRect(px + 10, baseY - 40, 4, 26);
-        ctx.fillRect(px - 6, baseY - 34, 24, 4);
-      }
-    },
-
-    _ground: function (ctx, cam) {
-      var gy = this.groundY;
-      var g = ctx.createLinearGradient(0, gy, 0, this.h);
-      g.addColorStop(0, '#8ED67E');
+    /* grass ground plane with converging mow bands */
+    _ground: function (ctx, V) {
+      var hy = V.horizonY;
+      var g = ctx.createLinearGradient(0, hy, 0, this.h);
+      g.addColorStop(0, '#9BDD88');
+      g.addColorStop(0.35, '#7CC96C');
       g.addColorStop(1, '#5FB35C');
       ctx.fillStyle = g;
-      ctx.fillRect(0, gy, this.w, this.h - gy);
+      ctx.fillRect(0, hy, this.w, this.h - hy);
 
-      // mowed stripes scrolling with the track
-      var stripe = 46;
-      var off = cam.dist % (stripe * 2);
-      ctx.fillStyle = 'rgba(255,255,255,0.055)';
-      for (var x = -off; x < this.w + stripe; x += stripe * 2) {
-        ctx.fillRect(x, gy, stripe, this.h - gy);
+      // perspective mow bands moving toward the camera
+      var spacing = 22;
+      var tPos = V.dist;
+      var m0 = Math.floor(tPos / spacing);
+      var m1 = Math.ceil((tPos + 130) / spacing);
+      ctx.fillStyle = 'rgba(255,255,255,0.06)';
+      for (var m = m0; m <= m1; m++) {
+        if (m % 2 !== 0) continue;
+        var z0 = m * spacing - tPos;
+        var z1 = z0 + spacing;
+        if (z1 <= 0) continue;
+        var yN = this._yAt(Math.max(z0, 0), V);
+        var yF = this._yAt(z1, V);
+        ctx.fillRect(0, yF, this.w, yN - yF + 1);
       }
 
-      // back edge of the track: darker rim
-      ctx.fillStyle = 'rgba(38,92,40,0.30)';
-      ctx.fillRect(0, gy, this.w, 5);
+      // horizon rim
+      ctx.fillStyle = 'rgba(38,92,40,0.35)';
+      ctx.fillRect(0, hy, this.w, 3);
+    },
 
-      // lane divider hints (dotted, scrolling)
-      ctx.fillStyle = 'rgba(255,255,255,0.14)';
-      var dashOff = (cam.dist * 1.0) % 56;
-      for (var i = 0; i < 2; i++) {
-        var lx = this.w * (i + 1) / 3;
-        for (var y = gy + 16 - 0; y < this.h - 8; y += 56) {
+    _yAt: function (z, V) {
+      var s = this.scaleAt(z, V.camD);
+      return V.horizonY + (V.baseY - V.horizonY) * s;
+    },
+
+    /* the garden path: trapezoid + moving stripes + lane dashes */
+    _track: function (ctx, V) {
+      var cx = V.cx, hy = V.horizonY, by = V.baseY;
+      var hwN = V.trackHalfW * this.scaleAt(V.zFar, V.camD);
+      var hwP = V.trackHalfW;
+
+      // trapezoid
+      var g = ctx.createLinearGradient(0, hy, 0, by);
+      g.addColorStop(0, '#D9C49B');
+      g.addColorStop(0.5, '#E4D0A8');
+      g.addColorStop(1, '#EADCB8');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.moveTo(cx - hwP, by);
+      ctx.lineTo(cx - hwN, hy);
+      ctx.lineTo(cx + hwN, hy);
+      ctx.lineTo(cx + hwP, by);
+      ctx.closePath();
+      ctx.fill();
+
+      // soft edges
+      ctx.strokeStyle = 'rgba(122,92,66,0.55)';
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(cx - hwP, by); ctx.lineTo(cx - hwN, hy);
+      ctx.moveTo(cx + hwP, by); ctx.lineTo(cx + hwN, hy);
+      ctx.stroke();
+
+      // transverse stripes sweeping toward the player
+      var spacing = 14;
+      var tPos = V.dist;
+      var m0 = Math.floor(tPos / spacing);
+      var m1 = Math.ceil((tPos + V.zFar) / spacing);
+      for (var m = m0; m <= m1; m++) {
+        var z = m * spacing - tPos;
+        if (z <= 0) continue;
+        var s = this.scaleAt(z, V.camD);
+        var y = hy + (by - hy) * s;
+        var half = hwP * s;
+        ctx.strokeStyle = 'rgba(122,92,66,' + (0.30 * s + 0.05) + ')';
+        ctx.lineWidth = Math.max(1, 3.2 * s);
+        ctx.beginPath();
+        ctx.moveTo(cx - half, y);
+        ctx.lineTo(cx + half, y);
+        ctx.stroke();
+      }
+
+      // lane divider dashes at lat = -0.5 and +0.5
+      var dashSeg = 10;
+      var phase = tPos % (dashSeg * 2);
+      ctx.fillStyle = 'rgba(255,255,255,0.55)';
+      for (var d = -1; d <= 1; d += 2) {
+        var lat = d * 0.5;
+        var k0 = Math.floor((tPos - phase) / dashSeg);
+        var k1 = Math.ceil((tPos + V.zFar) / dashSeg);
+        for (var k = k0; k <= k1; k++) {
+          if (k % 2 !== 0) continue;
+          var zA = Math.max(k * dashSeg - tPos + phase * 0, 0);
+          // dash spans zA .. zA + dashSeg
+          var sA = this.scaleAt(zA, V.camD);
+          var sB = this.scaleAt(zA + dashSeg, V.camD);
+          var yA = hy + (by - hy) * sA;
+          var yB = hy + (by - hy) * sB;
+          var xA = cx + lat * V.laneSpan * sA;
+          var xB = cx + lat * V.laneSpan * sB;
+          ctx.strokeStyle = 'rgba(255,255,255,' + (0.18 + 0.35 * sA) + ')';
+          ctx.lineWidth = Math.max(1, 4.5 * sA);
           ctx.beginPath();
-          ctx.arc(lx + Math.sin((y + cam.dist) * 0.02) * 1.5, y - dashOff * 0, 2.2, 0, 6.283);
-          ctx.fill();
+          ctx.moveTo(xA, yA);
+          ctx.lineTo(xB, yB);
+          ctx.stroke();
         }
       }
     },
 
-    /* big props standing just behind the track (1:1 parallax) */
-    _trackProps: function (ctx, cam) {
-      var off = cam.dist;
-      var spacing = 130;
-      var start = Math.floor((off - 120) / spacing);
-      var end = Math.ceil((off + this.w + 120) / spacing);
-      for (var n = start; n <= end; n++) {
+    /* big props on both sides of the path (z-sorted, far -> near) */
+    _trackProps: function (ctx, V) {
+      var spacing = 26;
+      var tPos = V.dist;
+      var n0 = Math.ceil(tPos / spacing);
+      var n1 = Math.floor((tPos + V.zFar) / spacing);
+      var list = [];
+      for (var n = n0; n <= n1; n++) {
         var r = hash01(n * 1.7);
-        var x = n * spacing - off + (hash01(n * 5.1) * 46 - 23);
-        var baseY = this.groundY + 8;
-        var s = 0.85 + hash01(n * 9.3) * 0.4;
-        if (r < 0.26) {
-          this._tree(ctx, x, baseY, s);
-        } else if (r < 0.44) {
-          this._bushBig(ctx, x, baseY, s);
-        } else if (r < 0.58) {
-          this._bench(ctx, x, baseY, s);
-        } else if (r < 0.68) {
-          this._lamp(ctx, x, baseY, s);
-        } else if (r < 0.74) {
-          this._fountain(ctx, x, baseY, s);
-        } else if (r < 0.82) {
-          this._signpost(ctx, x, baseY, s);
+        if (r > 0.78) continue; // breather gaps
+        var z = n * spacing - tPos;
+        var side = hash01(n * 3.1) < 0.5 ? -1 : 1;
+        var lat = side * (1.9 + hash01(n * 7.7) * 1.5); // beyond track edge
+        var kind =
+          r < 0.09 ? 'tree' :
+          r < 0.17 ? 'bushBig' :
+          r < 0.23 ? 'bench' :
+          r < 0.29 ? 'lamp' :
+          r < 0.335 ? 'fountain' :
+          r < 0.38 ? 'signpost' : 'tree';
+        list.push({ z: z, lat: lat, kind: kind, s: 0.8 + hash01(n * 9.3) * 0.45, n: n });
+      }
+      list.sort(function (a, b) { return b.z - a.z; }); // far first
+      for (var i = 0; i < list.length; i++) {
+        var p = list[i];
+        var s = this.scaleAt(p.z, V.camD) * p.s * 1.5;
+        if (s < 0.02) continue;
+        var x = V.cx + p.lat * V.laneSpan * this.scaleAt(p.z, V.camD);
+        var y = this._yAt(p.z, V);
+        var sway = Math.sin(this._t * 1.1 + p.n * 0.7) * 0.02;
+        switch (p.kind) {
+          case 'tree': this._tree(ctx, x, y, s, sway); break;
+          case 'bushBig': this._bushBig(ctx, x, y, s); break;
+          case 'bench': this._bench(ctx, x, y, s); break;
+          case 'lamp': this._lamp(ctx, x, y, s); break;
+          case 'fountain': this._fountain(ctx, x, y, s); break;
+          case 'signpost': this._signpost(ctx, x, y, s); break;
         }
-        // else: leave a breather gap
       }
     },
 
-    _trackFlowers: function (ctx, cam) {
-      var off = cam.dist * 1.0;
-      var spacing = 30;
-      var start = Math.floor((off - 30) / spacing);
-      var end = Math.ceil((off + this.w + 30) / spacing);
-      for (var n = start; n <= end; n++) {
+    _trackFlowers: function (ctx, V) {
+      var spacing = 13;
+      var tPos = V.dist;
+      var n0 = Math.ceil(tPos / spacing);
+      var n1 = Math.floor((tPos + 70) / spacing); // only near flowers (perf)
+      var list = [];
+      for (var n = n0; n <= n1; n++) {
         var r = hash01(n * 11.3);
-        if (r < 0.25) continue;
-        var x = n * spacing - off + (hash01(n * 3.7) * 22 - 11);
-        var gy = this.groundY + 3;
-        this._flower(ctx, x, gy, 0.55 + hash01(n * 17) * 0.5,
-          ['#FF8AC2', '#FFC93C', '#FF7A6E', '#C79BFF', '#FFF3A8'][Math.floor(r * 5) % 5]);
+        if (r < 0.3) continue;
+        var z = n * spacing - tPos;
+        var side = hash01(n * 13.9) < 0.5 ? -1 : 1;
+        var lat = side * (1.25 + hash01(n * 17.1) * 0.5);
+        list.push({ z: z, lat: lat, c: ['#FF8AC2', '#FFC93C', '#FF7A6E', '#C79BFF', '#FFF3A8'][Math.floor(r * 5) % 5], s: 0.7 + hash01(n * 19.3) * 0.5 });
+      }
+      list.sort(function (a, b) { return b.z - a.z; });
+      for (var i = 0; i < list.length; i++) {
+        var f = list[i];
+        var s = this.scaleAt(f.z, V.camD) * f.s * 1.3;
+        if (s < 0.025) continue;
+        var x = V.cx + f.lat * V.laneSpan * this.scaleAt(f.z, V.camD);
+        var y = this._yAt(f.z, V);
+        this._flower(ctx, x, y, s, f.c);
       }
     },
 
@@ -372,44 +469,24 @@
       }
     },
 
-    /* big blurred grass tufts at the very front (parallax > 1) */
-    _foreground: function (ctx, cam) {
-      var off = cam.dist * 1.22;
-      var spacing = 72;
-      ctx.globalAlpha = 0.65;
-      var start = Math.floor((off - 100) / spacing);
-      var end = Math.ceil((off + this.w + 100) / spacing);
-      for (var n = start; n <= end; n++) {
-        var r = hash01(n * 23.7);
-        if (r < 0.3) continue;
-        var x = n * spacing - off;
-        var y = this.h + 6;
-        ctx.fillStyle = '#4E9E52';
-        this._tuft(ctx, x, y, 1.1 + r * 0.9);
-        if (r > 0.75) {
-          this._flower(ctx, x + 14, y - 26, 0.9,
-            ['#FF8AC2', '#FFC93C', '#FF7A6E'][Math.floor(r * 3) % 3]);
-        }
-      }
+    /* soft grass silhouettes in the bottom corners (depth framing) */
+    _cornerTufts: function (ctx) {
+      ctx.fillStyle = '#3F8A44';
+      ctx.globalAlpha = 0.8;
+      var sway = Math.sin(this._t * 1.3) * 3;
+      this._tuft(ctx, -6 + sway, this.h + 8, 2.4);
+      this._tuft(ctx, this.w + 6 - sway, this.h + 8, 2.6);
+      ctx.fillStyle = '#4E9E52';
+      this._tuft(ctx, 16 + sway * 0.6, this.h + 10, 1.8);
+      this._tuft(ctx, this.w - 16 - sway * 0.6, this.h + 10, 2.0);
       ctx.globalAlpha = 1;
     },
 
     /* ------------------------- prop drawing helpers ------------------------- */
-    _treeShape: function (ctx, x, baseY, s, far) {
-      ctx.fillStyle = far ? '#8A6B4F' : '#8A6B4F';
-      ctx.fillRect(x - 3.5 * s, baseY - 34 * s, 7 * s, 34 * s);
-      ctx.beginPath();
-      ctx.arc(x, baseY - 46 * s, 17 * s, 0, 6.283);
-      ctx.arc(x - 12 * s, baseY - 36 * s, 12 * s, 0, 6.283);
-      ctx.arc(x + 12 * s, baseY - 36 * s, 12 * s, 0, 6.283);
-      ctx.fill();
-    },
-
-    _tree: function (ctx, x, baseY, s) {
+    _tree: function (ctx, x, baseY, s, sway) {
       ctx.save();
       ctx.translate(x, baseY);
-      var sway = Math.sin(this._t * 1.1 + x * 0.05) * 0.02;
-      ctx.rotate(sway);
+      ctx.rotate(sway || 0);
       ctx.fillStyle = '#7A5C42';
       ctx.beginPath();
       ctx.moveTo(-5 * s, 0);
@@ -437,7 +514,6 @@
       ctx.arc(x, baseY - 18 * s, 16 * s, 0, 6.283);
       ctx.arc(x + 14 * s, baseY - 12 * s, 14 * s, 0, 6.283);
       ctx.fill();
-      // berries
       ctx.fillStyle = '#F25555';
       ctx.beginPath();
       ctx.arc(x - 10 * s, baseY - 16 * s, 2.4 * s, 0, 6.283);
@@ -449,11 +525,11 @@
       ctx.save();
       ctx.translate(x, baseY);
       ctx.fillStyle = '#B98A5A';
-      ctx.fillRect(-22 * s, -22 * s, 44 * s, 6 * s);          // seat
-      ctx.fillRect(-22 * s, -40 * s, 44 * s, 5 * s);          // back
-      ctx.fillRect(-22 * s, -40 * s, 4 * s, 40 * s);          // posts
+      ctx.fillRect(-22 * s, -22 * s, 44 * s, 6 * s);
+      ctx.fillRect(-22 * s, -40 * s, 44 * s, 5 * s);
+      ctx.fillRect(-22 * s, -40 * s, 4 * s, 40 * s);
       ctx.fillRect(18 * s, -40 * s, 4 * s, 40 * s);
-      ctx.fillRect(-20 * s, -16 * s, 4 * s, 16 * s);          // legs
+      ctx.fillRect(-20 * s, -16 * s, 4 * s, 16 * s);
       ctx.fillRect(16 * s, -16 * s, 4 * s, 16 * s);
       ctx.restore();
     },
@@ -487,10 +563,6 @@
       ctx.fillStyle = 'rgba(200,235,255,0.9)';
       ctx.beginPath();
       ctx.arc(0, -40 * s - sp, 4.5 * s, 0, 6.283); ctx.fill();
-      ctx.beginPath();
-      ctx.arc(-6 * s, -36 * s - sp * 0.6, 2.6 * s, 0, 6.283); ctx.fill();
-      ctx.beginPath();
-      ctx.arc(6 * s, -36 * s - sp * 0.6, 2.6 * s, 0, 6.283); ctx.fill();
       ctx.restore();
     },
 

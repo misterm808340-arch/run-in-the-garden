@@ -111,12 +111,14 @@
     },
 
     speedLines: function (x, y) {
-      if (!U.chance(0.5)) return;
+      if (!U.chance(0.6)) return;
+      // vertical streaks rushing past at the screen edges (forward motion)
+      var side = U.chance(0.5) ? U.rand(0, 60) : U.rand(340, 400);
       this._add({
-        x: x + U.rand(-6, 6), y: y + U.rand(-20, 20),
-        vx: U.rand(-260, -180), vy: 0,
-        life: 0.22, max: 0.22, size: U.rand(8, 16),
-        color: 'rgba(255,255,255,0.7)', grav: 0, type: 'line'
+        x: side, y: U.rand(200, 560),
+        vx: 0, vy: U.rand(420, 640),
+        life: 0.28, max: 0.28, size: U.rand(14, 26),
+        color: 'rgba(255,255,255,0.75)', grav: 0, type: 'lineV'
       });
     },
 
@@ -166,6 +168,12 @@
             ctx.strokeStyle = p.color; ctx.lineWidth = 2.4; ctx.lineCap = 'round';
             ctx.beginPath();
             ctx.moveTo(p.x, p.y); ctx.lineTo(p.x + p.size, p.y);
+            ctx.stroke();
+            break;
+          case 'lineV':
+            ctx.strokeStyle = p.color; ctx.lineWidth = 2.2; ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(p.x, p.y); ctx.lineTo(p.x, p.y + p.size);
             ctx.stroke();
             break;
           case 'star':

@@ -10,7 +10,7 @@
   var Game = {
     state: 'loading',
     canvas: null, ctx: null, dpr: 1, scale: 1,
-    view: { w: 400, h: 700, groundY: 560, trackY: 620, laneDepthY: [-8, 0, 8] },
+    view: { w: 400, h: 700, horizonY: 252, baseY: 560, cx: 200, laneSpan: 100, trackHalfW: 150, camD: 5.8, zFar: 100 },
 
     dist: 0, elapsed: 0, coinsRun: 0, coinScore: 0,
     pu: { magnet: 0, boost: 0, x2: 0 },
@@ -104,13 +104,26 @@
       this.canvas.height = Math.round(cssH * this.dpr);
       this.scale = this.canvas.width / C.logicalW;
       var h = this.canvas.height / this.scale;
-      var groundY = h * C.groundFrac;
+      var V3 = C.view3d;
       this.view.w = C.logicalW;
       this.view.h = h;
-      this.view.groundY = groundY;
-      this.view.trackY = groundY + (h - groundY) * 0.42;
-      RG.World.resize(C.logicalW, h, groundY);
-      if (RG.Player.y <= 0 || RG.Player.grounded) RG.Player.y = this.view.trackY;
+      this.view.horizonY = h * V3.horizonFrac;
+      this.view.baseY = h * V3.baseFrac;
+      this.view.cx = C.logicalW / 2;
+      this.view.laneSpan = V3.laneSpan;
+      this.view.trackHalfW = V3.trackHalfW;
+      this.view.camD = V3.camD;
+      this.view.zFar = V3.zFar;
+      RG.World.resize(C.logicalW, h, this.view.horizonY, this.view.baseY);
+    },
+
+    /* player position on screen (logical units) - used by fx */
+    playerScreen: function () {
+      var p = RG.Player;
+      return {
+        x: this.view.cx + p.lat * this.view.laneSpan,
+        y: this.view.baseY - p.jumpH - 30
+      };
     },
 
     /* ============================ states ============================ */
@@ -187,7 +200,8 @@
 
     update: function (dt) {
       var menuLike = (this.state === 'menu' || this.state === 'howto' || this.state === 'loading');
-      RG.World.update(dt, this.speedNow(), !menuLike);
+      var trackPos = menuLike ? this.menuDist : this.dist * C.view3d.zSpeedK;
+      RG.World.update(dt, this.speedNow(), !menuLike, trackPos);
 
       if (menuLike) {
         this.menuDist += dt * 40;
@@ -237,43 +251,44 @@
 
     _collide: function (dt) {
       var p = RG.Player;
-      var box = p.box();
 
       /* pickups */
-      var got = RG.Entities.collect(box);
+      var got = RG.Entities.collect(p);
       for (var i = 0; i < got.length; i++) {
         var e = got[i];
+        var ex = e.sx, ey = e.sy - e.y * e.s * 0.55;
         if (e.kind === 'coin' || e.kind === 'star') {
           var base = e.kind === 'coin' ? C.coinValue : C.starValue;
           var v = base * (this.pu.x2 > 0 ? 2 : 1);
           this.coinScore += v;
           this.coinsRun += e.kind === 'coin' ? 1 : 5;
           A.sfx(e.kind === 'coin' ? 'coin' : 'star');
-          RG.Particles.coinBurst(e.x, e.y, e.kind === 'coin' ? '#FFC93C' : '#FFD84D');
-          RG.Particles.text(e.x, e.y - 14, '+' + v, e.kind === 'coin' ? '#FFE27A' : '#FFD84D');
+          RG.Particles.coinBurst(ex, ey, e.kind === 'coin' ? '#FFC93C' : '#FFD84D');
+          RG.Particles.text(ex, ey - 14, '+' + v, e.kind === 'coin' ? '#FFE27A' : '#FFD84D');
         } else if (e.kind === 'pu') {
-          this._applyPowerup(e.pu, e.x, e.y);
+          this._applyPowerup(e.pu, ex, ey);
         }
       }
 
       /* obstacles */
-      var o = RG.Entities.hitObstacle(box);
+      var o = RG.Entities.hitObstacle(p);
       if (!o) return;
+      var ox = o.sx, oy = o.sy - o.h * o.s * 0.5;
 
       if (o.kind === 'puddle') {
         // run through it (grounded) = splash + brief slow-down; jumping over = clean
         if (p.grounded && U.now() >= this.slowUntil) {
           this.slowUntil = U.now() + C.slowDur * 1000;
           A.sfx('splash');
-          RG.Particles.splash(o.x, o.bottom - 6);
+          RG.Particles.splash(o.sx, o.sy);
         }
         return;
       }
 
       if (this.pu.boost > 0) {                       // dash smashes everything
         A.sfx('smash');
-        RG.Particles.smash(o.x, o.bottom - o.h / 2);
-        RG.Particles.text(o.x, o.bottom - o.h - 16, '+' + C.boostSmashBonus, '#FF9F1C');
+        RG.Particles.smash(ox, oy);
+        RG.Particles.text(ox, oy - 16, '+' + C.boostSmashBonus, '#FF9F1C');
         this.coinScore += C.boostSmashBonus;
         RG.Entities.removeObstacle(o);
         this.shakeT = 0.12;
@@ -285,7 +300,7 @@
         p.shield = false;
         p.invincible = C.player.invincibleAfterShieldSec;
         A.sfx('shieldBreak');
-        RG.Particles.powerBurst(o.x, o.bottom - o.h / 2, '#5AC8FA');
+        RG.Particles.powerBurst(ox, oy, '#5AC8FA');
         RG.Entities.removeObstacle(o);
         RG.UI.toast('Shield saved you!');
         return;
@@ -321,8 +336,9 @@
     /* ============================ crash / revive ============================ */
     crash: function (o) {
       var p = RG.Player;
+      var ps = this.playerScreen();
       A.sfx('hit');
-      RG.Particles.crash(p.x, p.y - 30);
+      RG.Particles.crash(ps.x, ps.y);
       this.shakeT = 0.4;
       this.cancelReviveTimer();
 
@@ -443,7 +459,7 @@
       ctx.setTransform(this.scale, 0, 0, this.scale, 0, 0);
 
       var menuLike = (this.state === 'menu' || this.state === 'howto' || this.state === 'loading');
-      var camDist = menuLike ? this.menuDist : this.dist;
+      var camDist = menuLike ? this.menuDist : this.dist * C.view3d.zSpeedK;
 
       // screen shake
       if (this.shakeT > 0) {
@@ -451,7 +467,13 @@
         ctx.translate(U.rand(-s, s), U.rand(-s, s));
       }
 
-      var cam = { w: v.w, h: v.h, groundY: v.groundY, dist: camDist };
+      var cam = {
+        w: v.w, h: v.h,
+        horizonY: v.horizonY, baseY: v.baseY,
+        laneSpan: v.laneSpan, trackHalfW: v.trackHalfW,
+        cx: v.cx, camD: v.camD, zFar: v.zFar,
+        dist: camDist
+      };
       RG.World.render(ctx, cam);
 
       if (!menuLike) {
@@ -480,11 +502,11 @@
   window.RG_DEBUG = {
     start: function () { Game.startRun(); },
     menu: function () { Game.toMenu(); },
-    kill: function () { if (Game.state === 'playing') Game.crash({ kind: 'rock', x: RG.Player.x, bottom: RG.Player.y, h: 40 }); },
+    kill: function () { if (Game.state === 'playing') Game.crash({ kind: 'rock', sx: 0, sy: 0, h: 40, s: 1 }); },
     finish: function () { if (Game.state === 'playing' || Game.state === 'revive') { Game.cancelReviveTimer(); Game.gameOver(); } },
     pu: function (k) {
       if (k === 'shield') RG.Player.shield = true;
-      else Game._applyPowerup(k || 'magnet', RG.Player.x, RG.Player.y - 60);
+      else Game._applyPowerup(k || 'magnet', RG.Player.lat, 0);
     },
     game: function () { return Game; }
   };

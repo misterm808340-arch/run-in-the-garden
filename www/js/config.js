@@ -13,7 +13,7 @@
   };
 
   var Config = {
-    VERSION: '1.0.0',
+    VERSION: '1.1.0',
 
     /* ---------------- AdMob (TEST MODE) ---------------- */
     ads: {
@@ -26,11 +26,23 @@
       reviveTimerSec: 5
     },
 
-    /* ---------------- World / lanes ---------------- */
+    /* ---------------- World / forward 3D view ---------------- */
     logicalW: 400,               // design width in world units
-    laneX: [76, 200, 324],
-    groundFrac: 0.74,            // ground line = fraction of logical height
     metersPerUnit: 1 / 50,
+    view3d: {
+      horizonFrac: 0.36,         // horizon line as fraction of view height
+      baseFrac: 0.80,            // player base line as fraction of view height
+      laneSpan: 100,             // px between adjacent lane centers at player plane
+      trackHalfW: 150,           // track half width at player plane
+      camD: 5.8,                 // perspective: scale(z) = camD / (camD + z)
+      zFar: 100,                 // spawn distance (normalized track units)
+      zSpeedK: 0.14,             // world speed (u/s) -> z approach speed
+      hitZ: 6,                   // collision window around the player plane
+      laneHitTol: 0.58,          // lateral tolerance to hit an obstacle
+      coinZWin: 9,               // coin collection z window
+      coinYTol: 46,              // coin height tolerance vs bunny
+      magnetZ: 62                // magnet attraction range (z units)
+    },
 
     /* ---------------- Speed & difficulty ---------------- */
     speedStart: 330,             // world units / second
